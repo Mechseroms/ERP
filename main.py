@@ -1,11 +1,12 @@
 from PyQt5.QtWidgets import (QFrame, QListWidget, QListWidgetItem, QHBoxLayout, QVBoxLayout, QApplication, QMainWindow, QMdiArea, 
                              QMenuBar, QStyle, QSizePolicy, QAction, QWidget, QMdiSubWindow, QLabel, QToolBar, 
                              QTableWidget, QTableWidgetItem, QGroupBox, QGridLayout, 
-                             QMessageBox, QLineEdit, QStatusBar)
+                             QMessageBox, QLineEdit, QStatusBar, QPushButton, QTextEdit)
 import database, json, helpers
-from PyQt5.QtCore import Qt, QSize, QEvent
-from PyQt5.QtGui import QFont
+from PyQt5.QtCore import Qt, QSize, QEvent, pyqtSignal
+from PyQt5.QtGui import QFont, QFontMetrics
 from subwindows import vendor_window
+from subwindows import receipts_window
 
 class ClickableLListItem(QListWidgetItem):
     def __init__(self, receipt_id):
@@ -14,13 +15,15 @@ class ClickableLListItem(QListWidgetItem):
 
 
 class ReceiptsWindow(QMdiSubWindow):
+    closed = pyqtSignal(str)
+
     def __init__(self) -> None:
         super().__init__()
         self.status_bar: QStatusBar = QStatusBar()
 
-
         self.main_widget = QWidget()
         self.main_vertical_layout = QVBoxLayout()
+        self.main_vertical_layout.setContentsMargins(0, 0, 0, 0)
         self.internal_widget: QWidget = QWidget()
         self.main_horizontal_layout: QHBoxLayout = QHBoxLayout()
         
@@ -68,31 +71,41 @@ class ReceiptsWindow(QMdiSubWindow):
         # receipt_id, receipt_status, date_submitted, submitted_by, receipt_length, receipt_img
         self.receipt_id_label: QLabel = QLabel()
         self.receipt_id_label.setText("Receipt ID: ")
-        self.receipt_id_label.setMaximumWidth(180)
+        font_metric = QFontMetrics(self.receipt_id_label.font())
+        width = font_metric.width(self.receipt_id_label.text())
+        self.receipt_id_label.setMaximumWidth(width)
         self.receipt_id_edit: QLineEdit = QLineEdit()
         self.receipt_id_edit.setMaximumWidth(180)
 
         self.receipt_status_label: QLabel = QLabel()
         self.receipt_status_label.setText("Receipt Status: ")
-        self.receipt_status_label.setMaximumWidth(180)
+        font_metric = QFontMetrics(self.receipt_status_label.font())
+        width = font_metric.width(self.receipt_status_label.text())
+        self.receipt_status_label.setMaximumWidth(width)
         self.receipt_status_edit: QLineEdit = QLineEdit()
         self.receipt_status_edit.setMaximumWidth(180)
 
         self.date_submitted_label: QLabel = QLabel()
         self.date_submitted_label.setText("Date Submitted: ")
-        self.date_submitted_label.setMaximumWidth(180)
+        font_metric = QFontMetrics(self.date_submitted_label.font())
+        width = font_metric.width(self.date_submitted_label.text())
+        self.date_submitted_label.setMaximumWidth(width)
         self.date_submitted_edit: QLineEdit = QLineEdit()
         self.date_submitted_edit.setMaximumWidth(180)
 
         self.submitted_by_label: QLabel = QLabel()
         self.submitted_by_label.setText("Submitted By: ")
-        self.submitted_by_label.setMaximumWidth(180)
+        font_metric = QFontMetrics(self.submitted_by_label.font())
+        width = font_metric.width(self.submitted_by_label.text())
+        self.submitted_by_label.setMaximumWidth(width)
         self.submitted_by_edit: QLineEdit = QLineEdit()
         self.submitted_by_edit.setMaximumWidth(180)
 
         self.receipt_length_label: QLabel = QLabel()
         self.receipt_length_label.setText("Receipt Length: ")
-        self.receipt_length_label.setMaximumWidth(180)
+        font_metric = QFontMetrics(self.receipt_length_label.font())
+        width = font_metric.width(self.receipt_length_label.text())
+        self.receipt_length_label.setMaximumWidth(width)
         self.receipt_length_label_qty: QLabel = QLabel()
         self.receipt_length_label_qty.setText("")
         self.receipt_length_label_qty.setMaximumWidth(180)
@@ -108,10 +121,55 @@ class ReceiptsWindow(QMdiSubWindow):
         self.info_grid.addWidget(self.receipt_length_label, 4, 0)
         self.info_grid.addWidget(self.receipt_length_label_qty, 4, 1, alignment=Qt.AlignLeft)
 
+
+        self.vendor_grid: QGridLayout = QGridLayout()
         
         self.vendor_group: QGroupBox = QGroupBox()
+        self.vendor_group.setLayout(self.vendor_grid)
         self.vendor_group.setTitle("Vendor Information")
         self.top_info_h_layout.addWidget(self.vendor_group)
+
+        self.vendor_name_label: QLabel = QLabel()
+        self.vendor_name_label.setText("Name: ")
+        font_metric = QFontMetrics(self.vendor_name_label.font())
+        width = font_metric.width(self.vendor_name_label.text())
+        self.vendor_name_label.setMaximumWidth(width)
+        self.vendor_name_edit: QLineEdit = QLineEdit()
+        self.vendor_name_edit.setMaximumWidth(180)
+        self.vendor_select_button: QPushButton = QPushButton()
+        self.vendor_select_button.setText("s")
+        self.vendor_select_button.setMaximumWidth(30)
+        self.vendor_select_button.clicked.connect(self.select_vendor)
+
+        self.vendor_phone_label: QLabel = QLabel()
+        self.vendor_phone_label.setText("Phone: ")
+        font_metric = QFontMetrics(self.vendor_phone_label.font())
+        width = font_metric.width(self.vendor_phone_label.text())
+        self.vendor_phone_label.setMaximumWidth(width)
+        self.vendor_phone_edit: QLineEdit = QLineEdit()
+        self.vendor_phone_edit.setMaximumWidth(180)
+
+        self.vendor_address_label: QLabel = QLabel()
+        self.vendor_address_label.setText("Address: ")
+        font_metric = QFontMetrics(self.vendor_address_label.font())
+        width = font_metric.width(self.vendor_address_label.text())
+        self.vendor_address_label.setMaximumWidth(width)
+        self.vendor_address_edit: QTextEdit = QTextEdit()
+        self.vendor_address_edit.setMaximumWidth(180)
+        self.vendor_address_edit.setMaximumHeight(75)
+
+
+        self.vendor_grid.addWidget(self.vendor_name_label, 0, 0)
+        self.vendor_grid.addWidget(self.vendor_name_edit, 0, 1)
+        self.vendor_grid.addWidget(self.vendor_select_button, 0, 2)
+
+        self.vendor_grid.addWidget(self.vendor_phone_label, 1, 0)
+        self.vendor_grid.addWidget(self.vendor_phone_edit, 1, 1)
+
+        self.vendor_grid.addWidget(self.vendor_address_label, 2, 0)
+        self.vendor_grid.addWidget(self.vendor_address_edit, 2, 1)
+
+
             # end
 
             # bottom level
@@ -258,7 +316,6 @@ class ReceiptsWindow(QMdiSubWindow):
         self.toolbar.installEventFilter(self)
         self.setWidget(self.main_widget)
 
-        self.resize(1200, 720)
         self.setWindowTitle("Receipts")
         self.load_data()
 
@@ -269,6 +326,17 @@ class ReceiptsWindow(QMdiSubWindow):
         self.date_submitted = None
         self.submitted_by = None
         self.vendor_id = None
+        self.vendor_name = None
+        self.vendor_phone = None
+        self.vendor_address = None
+
+    def select_vendor(self):
+        d = receipts_window.VendorSelectDialog(self, self.vendor_id)
+        result = d.exec_()
+        if result:
+            self.vendor_id = d.selected_id
+            database.update_receipt(self.select_receipt_id, {"vendor_id": int(self.vendor_id)})
+            self.refresh_receipt()
 
     def show_status_message(self, message):
         self.status_bar.showMessage(message)
@@ -351,6 +419,16 @@ class ReceiptsWindow(QMdiSubWindow):
         # 6 = vendor id
         self.vendor_id = receipt[6]
 
+        if self.vendor_id != 0:
+            vendor = database.fetch_vendor(self.vendor_id)
+            self.vendor_name = vendor[1]
+            self.vendor_phone = vendor[5]
+            self.vendor_address = vendor[2]
+        else:
+            self.vendor_name = None
+            self.vendor_phone = None
+            self.vendor_address = None
+
         self.refresh_ui()
 
     def refresh_ui(self):
@@ -359,6 +437,10 @@ class ReceiptsWindow(QMdiSubWindow):
         self.date_submitted_edit.setText(self.date_submitted)
         self.submitted_by_edit.setText(self.submitted_by)
         self.receipt_length_label_qty.setText(str(len(self.items.keys())))
+
+        self.vendor_name_edit.setText(self.vendor_name)
+        self.vendor_phone_edit.setText(self.vendor_phone)
+        self.vendor_address_edit.setText(self.vendor_address)
 
         self.items_table.clearContents()  
         self.index = 0
@@ -401,6 +483,10 @@ class ReceiptsWindow(QMdiSubWindow):
             item.setText(receipt_id)
             self.receipt_list.addItem(item)
 
+    def closeEvent(self, event):
+        self.closed.emit("receipt_window")
+        super().closeEvent(event)
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -432,6 +518,7 @@ class MainWindow(QMainWindow):
     def spawn_receipts_window(self):
         if "receipt_window" in self.window_properties.keys() and not self.window_properties["receipt_window"]["active"]:
             self.receipt_window = ReceiptsWindow()
+            self.receipt_window.closed.connect(self.despawn_window)
             self.window_properties["receipt_window"] = {"active": True}
             self.mdi_area.addSubWindow(self.receipt_window)
             self.receipt_window.show()
@@ -439,9 +526,14 @@ class MainWindow(QMainWindow):
     def spawn_vendor_window(self):
         if "vendor_window" in self.window_properties.keys() and not self.window_properties["vendor_window"]["active"]:
             self.vendor_window = vendor_window.VendorWindow()
+            self.vendor_window.closed.connect(self.despawn_window)
             self.window_properties["vendor_window"] = {"active": True}
             self.mdi_area.addSubWindow(self.vendor_window)
             self.vendor_window.show()
+
+    def despawn_window(self, window_name: str) -> None:
+        self.window_properties[window_name]["active"] = False
+
 
 app = QApplication([])
 window = MainWindow()
