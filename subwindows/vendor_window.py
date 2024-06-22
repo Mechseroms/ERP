@@ -194,8 +194,6 @@ class VendorWindow(QMdiSubWindow):
         self.toolbar.save.connect(self.save_vendor)
         self.toolbar.delete.connect(self.delete_vendor)
 
-        
-        
         self.main_ver_layout.addWidget(self.toolbar)
         self.main_ver_layout.addLayout(self.main_hor_layout)
 
