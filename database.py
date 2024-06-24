@@ -1,4 +1,4 @@
-import openfoodfacts
+import openfoodfacts, copy
 
 config = {"database": "http://192.168.1.45:5000"}
 api = openfoodfacts.API(user_agent="MyAwesomeApp/1.0")
@@ -93,3 +93,60 @@ def delete_vendor(id):
     if response.status_code == 200:
         return True
     return False
+
+def fetch_pantry_paginated(page, search_query):
+    query_a = "WHERE search_string LIKE ?"
+    params_a = [f"%{search_query}%"]
+        
+    limit = 50
+    offset = (page - 1) * limit
+
+    query_b = query_a
+    query_a += " LIMIT ? OFFSET ?"
+    params_b = copy.deepcopy(params_a)
+    params_a.append(limit)
+    params_a.append(offset)
+
+    print(query_a)
+    print(params_a)
+
+    payload = {
+        "page": page,
+        "query_a": query_a,
+        "query_b": query_b,
+        "params_a": params_a,
+        "params_b": params_b,
+        "limit": limit
+    }
+
+    response = requests.post(f"{config['database']}/query/pantry", json=payload)
+    if response.status_code == 200:
+        return True, response.json()
+    return False, []
+
+def fetch_pantry(id):
+    response = requests.get(f"{config['database']}/query/pantry/{id}")
+    if response.status_code == 200:
+        return response.json()['item']
+    return {}
+
+# Recipes database functions
+def fetch_recipe(id):
+    response = requests.get(f"{config['database']}/query/recipe/{id}")
+    if response.status_code == 200:
+        return response.json()['recipe']
+    return {}
+
+# Groups Functions
+def fetch_shopping_list(id):
+    response = requests.get(f"{config['database']}/query/shopping_list/{id}")
+    if response.status_code == 200:
+        return response.json()['shopping_list']
+    return {}
+
+# shoppinglist Functions
+def fetch_group(id):
+    response = requests.get(f"{config['database']}/query/group/{id}")
+    if response.status_code == 200:
+        return response.json()['group']
+    return {}

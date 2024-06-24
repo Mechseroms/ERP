@@ -6,13 +6,6 @@ import database, json, helpers, datetime
 from PyQt5.QtCore import Qt, QSize, QEvent, pyqtSignal
 from PyQt5.QtGui import QFont, QFontMetrics, QBrush, QColor
 
-# TODO: build a files dialog that you can add, download, and delete a file from a receipt
-# TODO: Data valadation in items_table for making sure QTY is not 0 and if the item expires then a date is given, also making sure the
-#       barcode starts and ends with a percent symbol. This data validation should be done as cells change AND at the attempt to resolve
-#       the receipt.
-# TODO: Search Bar for receipts_list by text and state (unresolved, resolved, denied)
-# TODO: Error/INFO dialogs for key operations like Deletion, resolving, denying, vendor change, etc.
-# TODO: HAve API list items default to food, have inserted items default to Other in their respective subtype dropdowns.
 
 class TableDropDown(QComboBox):
     subtypeChanged = pyqtSignal(QComboBox)
@@ -44,7 +37,7 @@ class ReceiptItemsList(QTableWidget):
         self.cellChanged.connect(self.cell_changed)
         self.setHorizontalHeaderLabels(["Type", "Barcode", "Name", "Qty", "Subtype", "Cost", "Packaging", "Expires", "Expiry Date", "Safety Stock", "Data"])
         
-        self.type_options = ['FOOD', 'FOOD_PLU', 'MEDICINE', 'HYGENIC', 'CLEANERS']
+        self.type_options = ['FOOD', 'FOOD_PLU', 'MEDICINE', 'HYGENIC', 'CLEANER', 'OTHER']
 
         self.itemDoubleClicked.connect(self.save_previous_value)
         self.itemClicked.connect(self.save_previous_value)
@@ -98,20 +91,20 @@ class ReceiptItemsList(QTableWidget):
             return
         
         barcode = self.item(row, 1).text()
-        item = self.items[barcode]
+        item = self.inv_items[barcode]
         data = item[4]
         # 0-data_type, 1-barcode, 2-name, 3-qty, 4-data
         if column == 3:
             item[column] = int(self.item(row, column).text())
-        elif column == 4:
-            data["cost"] = str(self.item(row, column).text())
         elif column == 5:
-            data["product_quantity_unit"] = self.item(row, column).text()
+            data["cost"] = str(self.item(row, column).text())
         elif column == 6:
-            data["expires"] = self.item(row, column).text()
-        elif column == 8:
-            data["safety_stock"] = int(self.item(row, column).text())
+            data["product_quantity_unit"] = self.item(row, column).text()
         elif column == 7:
+            data["expires"] = self.item(row, column).text()
+        elif column == 9:
+            data["safety_stock"] = int(self.item(row, column).text())
+        elif column == 8:
             data["Expiry Date"] = self.item(row, column).text()
         else:
             item[column] = self.item(row, column).text()
@@ -166,19 +159,16 @@ class ReceiptItemsList(QTableWidget):
             self.item_combobox: TableDropDown = TableDropDown(associatedBarcode=item)
             self.item_combobox.addItems(self.type_options)
 
-            data_item = QTableWidgetItem(str(json.dumps(value[4])))
-            
-            if state != "Unresolved":
-                data_type.setFlags(data_type.flags() & ~Qt.ItemIsEnabled)
-                barcode.setFlags(barcode.flags() & ~Qt.ItemIsEnabled)
-                name.setFlags(name.flags() & ~Qt.ItemIsEnabled)
-                qty.setFlags(qty.flags() & ~Qt.ItemIsEnabled)
-                data_item.setFlags(data_item.flags() & ~Qt.ItemIsEnabled)
-
             data: dict = value[4]
 
             if "sub_type" in data.keys():
                 self.item_combobox.setCurrentText(data['sub_type'])
+            else:
+                self.item_combobox.setCurrentText("OTHER")
+                data['sub_type'] = "OTHER"
+
+            data_item = QTableWidgetItem(str(json.dumps(data)))
+
 
             self.item_combobox.subtypeChanged.connect(self.subtype_changed)
 
@@ -195,6 +185,15 @@ class ReceiptItemsList(QTableWidget):
                     self.setItem(self.index, y, item)
                 y += 1
             
+
+
+            if state != "Unresolved":
+                data_type.setFlags(data_type.flags() & ~Qt.ItemIsEnabled)
+                barcode.setFlags(barcode.flags() & ~Qt.ItemIsEnabled)
+                name.setFlags(name.flags() & ~Qt.ItemIsEnabled)
+                qty.setFlags(qty.flags() & ~Qt.ItemIsEnabled)
+                data_item.setFlags(data_item.flags() & ~Qt.ItemIsEnabled)
+
             self.setItem(self.index, 0, data_type)
             self.setItem(self.index, 1, barcode)
             self.setItem(self.index, 2, name)
@@ -714,7 +713,6 @@ class ReceiptsWindow(QMdiSubWindow):
             self.save_receipt()
             success = database.resolve_receipt(self.select_receipt_id)
             if success:
-                self.refresh_receipt()
                 self.load_data()     
 
     def load_receipt(self, receipt_item):
