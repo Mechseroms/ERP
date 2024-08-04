@@ -564,7 +564,7 @@ class ReceiptListWidget(QWidget):
 
     def getSelectedItem(self):
         return self.receipt_list.selectedItems()[0]
-    
+
 class ReceiptsWindow(QMdiSubWindow):
     closed = pyqtSignal(str)
 

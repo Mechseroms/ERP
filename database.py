@@ -26,7 +26,7 @@ def check_openfoodfacts_api(barcode: str) -> tuple[bool, dict]:
     return False, {}
 
 # Receipts Database Handling Helper Functions
-def fetch_receipts():
+def fetch_receipts() -> list:
     response = requests.get(f"{config['database']}/query/receipts")
     if response.status_code == 200:
         return response.json()['receipts']
@@ -39,10 +39,10 @@ def fetch_receipt(id):
     return {}
 
 def insert_receipt(data):
-    response = requests.post(f"{config['database']}/query/receipt/insert", json=data)
+    response = requests.post(f"{config['database']}/external/api/add_receipt", json=data)
     if response.status_code == 200:
-        return True
-    return False
+        return True, response.json()["message"], response.json()["receipt_id"]
+    return False, response.json()["message"], 0
 
 def update_receipt(id, data):
     response = requests.post(f"{config['database']}/query/receipt/update/{id}", json=data)
@@ -62,6 +62,11 @@ def deny_receipt(id):
         return True
     return False
 
+def resolve_receipt_line(id: int, items: list):
+    response = requests.post(f"{config['database']}/external/api/resolve-line/{id}", json={"items": items})
+    if response.status_code == 200:
+        return True, response.json()["messages"]
+    return False, response.json()["messages"]
 
 # Vendor Database Handling Helper Functions
 def insert_vendor(data):
@@ -93,6 +98,7 @@ def delete_vendor(id):
     if response.status_code == 200:
         return True
     return False
+
 
 def fetch_pantry_paginated(page, search_query):
     query_a = "WHERE search_string LIKE ?"
@@ -129,6 +135,12 @@ def fetch_pantry(id):
     if response.status_code == 200:
         return response.json()['item']
     return {}
+
+def update_pantry(id, payload: dict) -> bool:
+    response = requests.post(f"{config['database']}/query/pantry/update/{id}", json=payload)
+    if response.status_code == 200:
+        return True
+    return False
 
 # Recipes database functions
 def fetch_recipe(id):

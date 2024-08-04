@@ -4,21 +4,13 @@ from PyQt5.QtWidgets import (QMdiSubWindow, QStatusBar, QWidget, QVBoxLayout, QT
 from PyQt5.QtCore import pyqtSignal, QSize, QEvent, Qt
 from PyQt5.QtGui import QFontMetrics, QFont
 import database
-
-class ClickableTreeWidgetItem(QTreeWidgetItem):
-    """Created with the sole purpose of adding a data variable.
-
-    Could just be my lack of knowledge at the moment, but this is the best way i could
-    think about saving a unique id into an item to be called on later during signal calls.
-    """
-    def __init__(self, data: any = None) -> None:
-        super().__init__()
-        self.data = data
+from subwindows.InventoryItemSelect import ItemSelectDialog
 
 class ClickableLListItem(QListWidgetItem):
-    def __init__(self, item_id):
+    def __init__(self, item_id: int = None, inner_value: str = None):
         super().__init__()
         self.item_id = item_id
+        self.inner_value = inner_value
 
 class InventoryMainToolbar(QToolBar):
     buttonHovered = pyqtSignal(str)
@@ -64,119 +56,12 @@ class InventoryMainToolbar(QToolBar):
         self.add_item_action = QAction("&Add", self)
         self.add_item_action.setStatusTip("Adds a new item to the database.")
         self.add_item_action.hovered.connect(lambda: self.buttonHovered.emit(self.add_item_action.statusTip()))
-
-        self.addAction(self.add_item_action)
-
-class ItemSelectDialog(QDialog):
-    def __init__(self, parent) -> None:
-        super().__init__(parent)
-        self.grid_layout: QGridLayout = QGridLayout()
-
-        self.search_input: QLineEdit = QLineEdit()
-        self.search_input.setPlaceholderText("Search...")
-        self.search_input.setStyleSheet("border-radius: 20px;")
-        self.search_input.setFixedHeight(30)
-
-        self.item_tree: QTreeWidget = QTreeWidget(self)
-        self.item_tree.setHeaderLabels(["ID", "Barcode", "Item Name", "Brand"])
-        self.item_tree.setAlternatingRowColors(True)
-        self.item_tree.itemDoubleClicked.connect(self.new_selected)
-
-
-        st = """
-            QPushButton {
-                background-color: #D3D3D3;
-                border: none;
-                border-radius: 10px;
-                padding: 2px;
-                color: #2F4F4F;
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background-color: #DCDCDC;
-            }
-            QPushButton:pressed {
-                background-color: #C0C0C0;
-            }
-        """
-
-        self.back_arrow: QPushButton = QPushButton()
-        self.back_arrow.setText("<-")
-        self.back_arrow.setStyleSheet(st)
-        self.back_arrow.clicked.connect(self.last_page)
-
-        self.current_page = 1
-        self.total_pages = 0
-        self.last_search = ""
-        self.page_label: QLabel = QLabel()
-        self.page_label.setText(f"{self.current_page}/{self.total_pages}")
-
-        self.foreward_arrow: QPushButton = QPushButton()
-        self.foreward_arrow.setText("->")
-        self.foreward_arrow.setStyleSheet(st)
-        self.foreward_arrow.clicked.connect(self.next_page)
-
-        self.grid_layout.addWidget(self.search_input, 0, 0, 1, 3)
-        self.grid_layout.addWidget(self.item_tree, 1, 0, 1, 7)
-
-        self.grid_layout.addWidget(self.back_arrow, 2, 2)
-        self.grid_layout.addWidget(self.page_label, 2, 3, 1, 1, Qt.AlignCenter)
-        self.grid_layout.addWidget(self.foreward_arrow, 2, 4)
-
-        self.setLayout(self.grid_layout)
-        self.setWindowTitle("Select Inventory Item...")
-        self.resize(1000, 300)
-
-        self.selected_id = 0
-        self.load_data()
-
-    def next_page(self):
-        self.current_page += 1
-        self.load_data()
-    
-    def last_page(self):
-        self.current_page -= 1
-        self.load_data()
-
-    def load_data(self):
-        search_query = self.search_input.text()
-        if search_query != self.last_search:
-            self.total_pages = 0
-            self.current_page = 1
-            self.last_search = self.search_input.text()
         
-        success, data = database.fetch_pantry_paginated(self.current_page, search_query)
-
-        if success:
-            self.total_pages = data['total_pages']
-            self.page_label.setText(f"{self.current_page} / {self.total_pages}")
-            items = data['items']
-
-            self.item_tree.clear()
-            for item in items:
-                listItem = ClickableTreeWidgetItem(item[0])
-                listItem.setText(0, str(item[0]))
-                listItem.setText(1, str(item[1]))
-                listItem.setText(2, str(item[2]))
-                listItem.setText(3, str(item[3]))
-                self.item_tree.addTopLevelItem(listItem)
-
-        self.item_tree.setTextElideMode(Qt.ElideRight)
-        self.item_tree.setColumnWidth(0, 50)
-        self.item_tree.setColumnWidth(1, 100)
-        self.item_tree.setColumnWidth(2, 400)
-        self.item_tree.setColumnWidth(3, 100)
-    
-    def closeEvent(self, event):
-        self.reject()
-        super().closeEvent(event)
-
-    def new_selected(self, value):
-        self.selected_id = value.data
-        self.accept()
+        self.addAction(self.add_item_action)
 
 class BasicInfoWidget(QWidget):
     itemSelected = pyqtSignal(int)
+    itemUpdate = pyqtSignal(dict)
 
     def __init__(self, font=None) -> None:
         super().__init__()
@@ -191,14 +76,23 @@ class BasicInfoWidget(QWidget):
         # group
         self.lookup_group: LookupGroup = LookupGroup(font)
         self.lookup_group.itemSelected.connect(self.lookup_process)
+        self.lookup_group.itemUpdate.connect(self.update_item)
         
         self.config_group = ItemConfigWidget(font)
+        self.config_group.itemUpdate.connect(self.update_item)
+
+        self.sub_veritical_layout: QVBoxLayout = QVBoxLayout()
+        self.sub_veritical_layout.addWidget(self.lookup_group)
+        self.sub_veritical_layout.addWidget(self.config_group)
+
+        self.categories_list = ListMachineGroup("Categories", font, editable=True)
+        self.categories_list.itemUpdate.connect(self.update_item)
 
         self.filler_frame: QFrame = QFrame()
         self.filler_frame.setStyleSheet("background-color: blue;")
 
-        self.main_horizontal_layout.addWidget(self.lookup_group)
-        self.main_horizontal_layout.addWidget(self.config_group)
+        self.main_horizontal_layout.addLayout(self.sub_veritical_layout)
+        self.main_horizontal_layout.addWidget(self.categories_list)
         self.main_horizontal_layout.addWidget(self.filler_frame, 2)
         self.setLayout(self.main_horizontal_layout)
         self.main_horizontal_layout.setContentsMargins(0, 0, 0, 0)
@@ -206,17 +100,22 @@ class BasicInfoWidget(QWidget):
     def lookup_process(self, _id):
         self.itemSelected.emit(_id)
 
-    def setFields(self, _id, _name, _barcode, _entry_type, _subtype, _ai_pickable, _expires):
-        self.lookup_group.setFields(_id, _barcode, _name)
+    def setFields(self, _id, _name, _barcode, _brand, _entry_type, _subtype, _ai_pickable, _expires, _categories):
+        self.lookup_group.setFields(_id, _barcode, _name, _brand)
         self.config_group.setFields(
             _entry_type,
             _subtype,
             _ai_pickable,
             _expires
         )
+        self.categories_list.setFields(_categories)
+
+    def update_item(self, data: dict) -> None:
+        self.itemUpdate.emit(data)
 
 class LookupGroup(QGroupBox):
     itemSelected = pyqtSignal(int)
+    itemUpdate = pyqtSignal(dict)
 
     def __init__(self, font=None):
         super().__init__()
@@ -264,6 +163,7 @@ class LookupGroup(QGroupBox):
         self.name_field: QLineEdit = QLineEdit()
         self.name_field.setFont(font)
         self.name_field.setMinimumWidth(160)
+        self.name_field.returnPressed.connect(self.update_name)
 
         self.name_label: QLabel = QLabel()
         self.name_label.setFont(font)
@@ -271,7 +171,18 @@ class LookupGroup(QGroupBox):
         font_metric = QFontMetrics(self.name_label.font())
         width = font_metric.width(self.name_label.text())
         self.name_label.setMaximumWidth(width)
-        self.name_field.setReadOnly(True)
+
+        self.brand_field: QLineEdit = QLineEdit()
+        self.brand_field.setFont(font)
+        self.brand_field.setMinimumWidth(160)
+        self.brand_field.returnPressed.connect(self.update_brand)
+
+        self.brand_label: QLabel = QLabel()
+        self.brand_label.setFont(font)
+        self.brand_label.setText("Brand: ")
+        font_metric = QFontMetrics(self.brand_label.font())
+        width = font_metric.width(self.brand_label.text())
+        self.brand_label.setMaximumWidth(width)
 
         self.grid_layout.addWidget(self.id_label, 0, 0)
         self.grid_layout.addWidget(self.id_field, 0, 1)
@@ -283,6 +194,12 @@ class LookupGroup(QGroupBox):
         self.grid_layout.addWidget(self.name_label, 2, 0)
         self.grid_layout.addWidget(self.name_field, 2, 1)
 
+        self.grid_layout.addWidget(self.brand_label, 3, 0)
+        self.grid_layout.addWidget(self.brand_field, 3, 1)
+
+        self.name_value = None
+        self.brand_value = None
+
     def lookup_process(self):
         d = ItemSelectDialog(self)
         d.setFont(self.font())
@@ -290,12 +207,29 @@ class LookupGroup(QGroupBox):
         if result:
             self.itemSelected.emit(d.selected_id)
     
-    def setFields(self, _id, _barcode, _name):
+    def setFields(self, _id, _barcode, _name, _brand):
+        self.name_value = _name
+        self.brand_value = _brand
         self.id_field.setText(str(_id))
         self.lookup_field.setText(str(_barcode))
         self.name_field.setText(str(_name))
+        self.brand_field.setText(str(_brand))
+
+    def update_name(self):
+        if self.name_value == self.name_field.text():
+            return
+        
+        self.itemUpdate.emit({'name': self.name_field.text()})
+    
+    def update_brand(self):
+        if self.brand_value == self.brand_field.text():
+            return
+        
+        self.itemUpdate.emit({'brands': self.brand_field.text()})
 
 class ItemConfigWidget(QGroupBox):
+    itemUpdate = pyqtSignal(dict)
+
     def __init__(self, font=None) -> None:
         super().__init__()
         
@@ -324,6 +258,7 @@ class ItemConfigWidget(QGroupBox):
         height = font_metric.height()
         self.entry_type_dropdown.setMinimumHeight(height)
         total_width += self.entry_type_dropdown.width()
+        self.entry_type_dropdown.currentTextChanged.connect(self.updateEntryType)
 
         self.sub_type_label: QLabel = QLabel()
         self.sub_type_label.setFont(font)
@@ -342,6 +277,7 @@ class ItemConfigWidget(QGroupBox):
         height = font_metric.height()
         self.sub_type_dropdown.setMinimumHeight(height)
         total_width += self.sub_type_dropdown.width()
+        self.sub_type_dropdown.currentTextChanged.connect(self.updateSubType)
 
         self.check_widget: QWidget = QWidget()
         self.check_grid: QGridLayout = QGridLayout()
@@ -349,11 +285,13 @@ class ItemConfigWidget(QGroupBox):
         self.expires_checkbox.setFont(font)
         self.expires_checkbox.setText('Expires')
         total_width += self.expires_checkbox.width()
+        self.expires_checkbox.clicked.connect(self.updateExpires)
 
         self.ai_pickable_checkbox: QCheckBox = QCheckBox()
         self.ai_pickable_checkbox.setFont(font)
         self.ai_pickable_checkbox.setText('AI Pickable')
         total_width += self.ai_pickable_checkbox.width()
+        self.ai_pickable_checkbox.clicked.connect(self.updateAiPickable)
 
 
         self.check_grid.addWidget(self.expires_checkbox, 0, 0)
@@ -369,17 +307,64 @@ class ItemConfigWidget(QGroupBox):
 
         self.setLayout(self.grid_layout)
         self.setTitle("Item Configuration")
+        self.entry_type = None
+        self.subtype = None
+        self.ai_pickable = None
+        self.expires = None
 
     def setFields(self, _entry_type, _subtype, _ai_pickable, _expires):
+        self.blockSignals(True)
         self.entry_type_dropdown.setCurrentText(_entry_type)
         self.sub_type_dropdown.setCurrentText(_subtype)
         if _expires == "yes":
             self.expires_checkbox.setCheckState(True)
+        else:
+            self.expires_checkbox.setCheckState(False)
+
         if _ai_pickable == "TRUE":
             self.ai_pickable_checkbox.setCheckState(True)
+        else:
+            self.ai_pickable_checkbox.setCheckState(False)
+
+        self.blockSignals(False)
+        self.entry_type = _entry_type
+        self.subtype = _subtype
+        self.ai_pickable = _ai_pickable
+        self.expires = _expires
+
+    def updateEntryType(self, newValue: str):
+        if newValue == self.entry_type:
+            return
+        
+        self.entry_type = newValue
+        self.itemUpdate.emit({"entry_type": newValue})
+    
+    def updateSubType(self, newValue: str):
+        if newValue == self.subtype:
+            return
+        
+        self.entry_type = newValue
+        self.itemUpdate.emit({"sub_type": newValue})
+
+    def updateExpires(self, _expires):
+        if _expires and self.expires != 'yes':
+            self.itemUpdate.emit({'expires': 'yes'})
+        
+        elif not _expires and self.expires != 'no':
+            self.itemUpdate.emit({'expires': 'no'})
+        
+    def updateAiPickable(self, _ai_pickable):
+        if _ai_pickable and self.ai_pickable != 'yes':
+            self.itemUpdate.emit({'AI_Pickable': 'yes'})
+        
+        elif not _ai_pickable and self.ai_pickable != 'no':
+            self.itemUpdate.emit({'AI_Pickable': 'no'})
+
 
 class ListMachineGroup(QGroupBox):
-    def __init__(self, title, font):
+    itemUpdate = pyqtSignal(dict)
+    
+    def __init__(self, title, font, editable:bool=False):
         super().__init__()
         self.setTitle(title)
 
@@ -387,49 +372,83 @@ class ListMachineGroup(QGroupBox):
 
         self.inner_list: QListWidget = QListWidget()
         self.inner_list.setFont(font)
+        self.inner_list.itemDelegate().closeEditor.connect(self.listEdited)
+
+        self.selected_index = None
+        self.list_input: QLineEdit = QLineEdit()
+        self.list_input.setPlaceholderText("Category...")
+        self.list_input.returnPressed.connect(self.add_item)
 
         self.add_button: QPushButton = QPushButton()
         self.add_button.setFont(font)
         self.add_button.setText("Add")
+        self.add_button.clicked.connect(self.add_item)
 
         self.delete_button: QPushButton = QPushButton()
         self.delete_button.setFont(font)
         self.delete_button.setText("Delete")
+        self.delete_button.clicked.connect(self.delete_item)
 
         self.grid_layout.addWidget(self.inner_list, 0, 0, 3, 2)
-        self.grid_layout.addWidget(self.add_button, 3, 0)
-        self.grid_layout.addWidget(self.delete_button, 3, 1)
+        self.grid_layout.addWidget(self.list_input, 3, 0, 1, 2)
+        self.grid_layout.addWidget(self.add_button, 4, 0)
+        self.grid_layout.addWidget(self.delete_button, 4, 1)
 
         self.setLayout(self.grid_layout)
+
+        self.editable: bool = editable
+        self.inner_items = []
+
+    def add_item(self):
+        self.list_input.setStyleSheet("")
         
+        if self.list_input.text() == "":
+            return
+        
+        if self.list_input.text() in self.inner_items:
+            self.list_input.setStyleSheet("QLineEdit { border: 1px solid red; }")
+            return
+
+        item: ClickableLListItem = ClickableLListItem(inner_value=self.list_input.text())
+        item.setText(self.list_input.text())
+        if self.editable:
+            item.setFlags(item.flags() | Qt.ItemIsEditable)
+        self.inner_list.addItem(item)
+        self.list_input.clear()
+
+        self.updateCategories()
+    
+    def delete_item(self):
+        if self.inner_list.currentItem():
+            item = self.inner_list.takeItem(self.inner_list.currentRow())
+            del item
+
+            self.updateCategories()
+
+    def listEdited(self):
+        edited_item: ClickableLListItem = self.inner_list.currentItem()
+        if edited_item.inner_value == edited_item.text() or edited_item.text() in self.inner_items:
+            return
+        
+        self.updateCategories()
+
     def setFields(self, _items: list):
+        self.inner_list.clear()
+        self.inner_items = _items
         for _item in _items:
-            item = QListWidgetItem()
+            item = ClickableLListItem(inner_value=_item)
             item.setText(_item)
+            if self.editable:
+                item.setFlags(item.flags() | Qt.ItemIsEditable)
             self.inner_list.addItem(item)
 
-class ListsWidgets(QWidget):
-    def __init__(self, font) -> None:
-        super().__init__()
-
-
-        self.main_horizontal_layout: QHBoxLayout = QHBoxLayout()
-        self.categories_list: ListMachineGroup = ListMachineGroup("Categories", font)
-        self.brands_list: ListMachineGroup = ListMachineGroup("Brands", font)
-
-        self.frame = QFrame()
-        self.frame.setStyleSheet("background-color: red;")
-
-        self.main_horizontal_layout.addWidget(self.categories_list)
-        self.main_horizontal_layout.addWidget(self.brands_list)
-
-        self.main_horizontal_layout.addWidget(self.frame, 2)
-        self.main_horizontal_layout.setContentsMargins(0, 0, 0, 0)
-        self.setLayout(self.main_horizontal_layout)
-
-    def setFields(self, _categories, _brands):
-        self.categories_list.setFields(_categories)
-        self.brands_list.setFields(_brands)
+    def updateCategories(self):
+        new_list = set([self.inner_list.item(ind).text() for ind in range(self.inner_list.count())])
+        if new_list == self.inner_items:
+            return
+        
+        self.inner_items = new_list
+        self.itemUpdate.emit({"categories": list(new_list)})
 
 class WhereUsedWidget(QWidget):
     def __init__(self, font) -> None:
@@ -488,20 +507,21 @@ class MainBodyWidget(QWidget):
 
         self.basic_info = BasicInfoWidget(font)
         self.basic_info.itemSelected.connect(self.loadItem)
-
-        self.list_widget = ListsWidgets(font)
+        self.basic_info.itemUpdate.connect(self.update_item)
 
         self.tabs_widget = DataTabs(font)
 
         self.main_vertical_layout.setContentsMargins(0, 0, 0, 0)
         self.main_vertical_layout.addWidget(self.basic_info)
-        self.main_vertical_layout.addWidget(self.list_widget)
         self.main_vertical_layout.addWidget(self.tabs_widget)
 
         self.setLayout(self.main_vertical_layout)
 
+        self.selected_id = None
+
     def loadItem(self, _id):
         item = database.fetch_pantry(_id)
+        self.selected_id = _id
         self.setFields(item)
 
     def setFields(self, item):
@@ -509,16 +529,17 @@ class MainBodyWidget(QWidget):
             _id=item[0], 
             _barcode=item[1],
             _name=item[2],
+            _brand=item[3],
             _entry_type=item[23],
             _subtype=item[24],
             _ai_pickable=item[21],
-            _expires=item[22]
+            _expires=item[22],
+            _categories=item[5]
             )
-        self.list_widget.setFields(
-            _categories=item[5],
-            _brands=item[4]
-        )
         self.tabs_widget.setFields(item)
+    
+    def update_item(self, data):
+        database.update_pantry(self.selected_id, data)
 
 class InventoryMaintenanceWindow(QMdiSubWindow):
     closed = pyqtSignal(str)

@@ -6,7 +6,7 @@ import database, json, helpers, datetime
 from PyQt5.QtCore import Qt, QSize, QEvent, pyqtSignal
 from PyQt5.QtGui import QFont, QFontMetrics, QBrush, QColor
 from subwindows import vendor_window
-from subwindows import receipts_window
+from subwindows import receipts_window_new
 from subwindows import inventory_maintenance
 
 class MainWindow(QMainWindow):
@@ -55,7 +55,7 @@ class MainWindow(QMainWindow):
 
     def spawn_receipts_window(self):
         if "receipt_window" in self.window_properties.keys() and not self.window_properties["receipt_window"]["active"]:
-            self.receipt_window = receipts_window.ReceiptsWindow()
+            self.receipt_window = receipts_window_new.ReceiptSubwindow()
             self.receipt_window.closed.connect(self.despawn_window)
             self.window_properties["receipt_window"] = {"active": True}
             self.mdi_area.addSubWindow(self.receipt_window)

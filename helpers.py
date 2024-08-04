@@ -5,6 +5,18 @@ def random_tag(length):
     characters = string.digits
     return ''.join(random.choice(characters) for i in range(length))
 
+def check_barcode(barcode):
+    linked, data = database.check_linked_lists(barcode)
+    if linked:
+        barcode = data['linked_barcode']
+
+    success, data = database.check_pantry_database(barcode)
+    if success:
+        return True, data
+
+    return False, {}
+
+
 def barcode_changed(barcode):
     # check the pantry
     linked, data = database.check_linked_lists(barcode)
